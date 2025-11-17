@@ -106,6 +106,8 @@ function buildSpatialGrid(blocks, chunkSize) {
     collisionTable.fill(HASH_EMPTY);
 
     let blockCount = 0;
+    const progressInterval = 10000; // Report progress every 10k blocks
+
     try {
 
         for (let i = 0; i < blocks.length; i++) {
@@ -147,6 +149,21 @@ function buildSpatialGrid(blocks, chunkSize) {
 
             blockCount++;
             validBlocksProcessed++;
+
+            // Send progress updates periodically
+            if (i % progressInterval === 0 && i > 0) {
+                const percentage = Math.round((i / blocks.length) * 100);
+                self.postMessage({
+                    type: 'progress',
+                    data: {
+                        processed: i,
+                        total: blocks.length,
+                        percentage,
+                        validBlocks: validBlocksProcessed,
+                        airSkipped: airBlocksSkipped,
+                    }
+                });
+            }
         }
 
         const actualBlockIds = new Uint32Array(blockCount);
