@@ -635,9 +635,13 @@ const EnvironmentBuilder = (
                     }
                     const geometry = object.geometry.clone();
                     geometry.applyMatrix4(worldMatrix);
+
+                    // Deinterleave geometry to handle InterleavedBufferAttributes
+                    const deinterleavedGeometry = deinterleaveGeometry(geometry);
+
                     if (Array.isArray(object.material)) {
                         const filteredGeometry = filterGeometryByMaterialIndex(
-                            geometry,
+                            deinterleavedGeometry,
                             materialIndex
                         );
                         if (filteredGeometry) {
@@ -646,7 +650,7 @@ const EnvironmentBuilder = (
                                 .geometries.push(filteredGeometry);
                         }
                     } else {
-                        geometriesByMaterial.get(key).geometries.push(geometry);
+                        geometriesByMaterial.get(key).geometries.push(deinterleavedGeometry);
                     }
                 });
             }
@@ -657,6 +661,13 @@ const EnvironmentBuilder = (
         for (const { material, geometries } of geometriesByMaterial.values()) {
             if (geometries.length > 0) {
                 const mergedGeometry = mergeGeometries(geometries);
+
+                // Check if mergeGeometries succeeded
+                if (!mergedGeometry) {
+                    console.error(`Failed to merge geometries for model ${modelType.name}. Skipping this material group.`);
+                    continue;
+                }
+
                 const instancedMesh = new THREE.InstancedMesh(
                     mergedGeometry,
                     material,
@@ -676,6 +687,38 @@ const EnvironmentBuilder = (
             modelHeight: boundingHeight,
             addedToScene: false,
         });
+    };
+
+    // Helper function to convert InterleavedBufferAttributes to regular BufferAttributes
+    const deinterleaveGeometry = (geometry: THREE.BufferGeometry): THREE.BufferGeometry => {
+        const attributes = geometry.attributes;
+        const newGeometry = geometry.clone();
+
+        for (const attributeName in attributes) {
+            const attribute = attributes[attributeName];
+
+            // Check if this is an InterleavedBufferAttribute
+            if (attribute.isInterleavedBufferAttribute) {
+                const interleavedAttr = attribute as THREE.InterleavedBufferAttribute;
+                const itemSize = interleavedAttr.itemSize;
+                const count = interleavedAttr.count;
+
+                // Create a new regular BufferAttribute with the same data
+                const array = new Float32Array(count * itemSize);
+                for (let i = 0; i < count; i++) {
+                    for (let j = 0; j < itemSize; j++) {
+                        array[i * itemSize + j] = interleavedAttr.getComponent(i, j);
+                    }
+                }
+
+                const newAttribute = new THREE.BufferAttribute(array, itemSize);
+                newAttribute.normalized = interleavedAttr.normalized;
+
+                newGeometry.setAttribute(attributeName, newAttribute);
+            }
+        }
+
+        return newGeometry;
     };
 
     const filterGeometryByMaterialIndex = (geometry, materialIndex) => {
