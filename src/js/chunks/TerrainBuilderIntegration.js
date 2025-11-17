@@ -118,8 +118,8 @@ export const updateTerrainChunks = async (
         try {
             await chunkSystem.updateFromTerrainDataParallel(terrainData, (progress) => {
                 // Optional: Update loading manager with progress
-                if (typeof loadingManager !== 'undefined' && loadingManager.isLoading) {
-                    loadingManager.updateLoading(
+                if (typeof window !== 'undefined' && window.loadingManager && window.loadingManager.isLoading) {
+                    window.loadingManager.updateLoading(
                         `Processing chunks... ${progress.percentage}%`
                     );
                 }

@@ -6,6 +6,8 @@
  * without blocking the main thread.
  */
 
+/* eslint-disable no-restricted-globals */
+
 const CHUNK_SIZE = 32;
 
 /**
