@@ -95,7 +95,7 @@ function App() {
                     const savedSkybox = await DatabaseManager.getData(STORES.SETTINGS, "selectedSkybox");
                     if (typeof savedSkybox === 'string') {
                         console.log("Applying saved skybox on app startup:", savedSkybox);
-                        terrainBuilderRef.current.changeSkybox(savedSkybox);
+                        terrainBuilderRef.current?.changeSkybox(savedSkybox);
                     }
                     // Also apply saved lighting settings (ambient and directional)
                     try {

@@ -1010,7 +1010,7 @@ function TerrainBuilder(
                 positions.forEach((pos) => {
                     const blockKey = `${pos.x},${pos.y},${pos.z}`;
                     const hasInstance =
-                        environmentBuilderRef.current.hasInstanceAtPosition(
+                        environmentBuilderRef.current?.hasInstanceAtPosition(
                             pos
                         );
                     if (!terrainRef.current[blockKey] && !hasInstance) {
@@ -2479,7 +2479,7 @@ function TerrainBuilder(
                             }
                         );
 
-                        environmentBuilderRef.current.forceRebuildSpatialHash();
+                        environmentBuilderRef.current?.forceRebuildSpatialHash();
 
                         setTimeout(() => resolve(), 0);
                     });
