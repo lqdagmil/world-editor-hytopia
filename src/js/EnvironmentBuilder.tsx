@@ -698,7 +698,7 @@ const EnvironmentBuilder = (
             const attribute = attributes[attributeName];
 
             // Check if this is an InterleavedBufferAttribute
-            if (attribute.isInterleavedBufferAttribute) {
+            if ('isInterleavedBufferAttribute' in attribute && attribute.isInterleavedBufferAttribute) {
                 const interleavedAttr = attribute as THREE.InterleavedBufferAttribute;
                 const itemSize = interleavedAttr.itemSize;
                 const count = interleavedAttr.count;
