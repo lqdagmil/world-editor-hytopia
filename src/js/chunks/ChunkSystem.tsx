@@ -2,6 +2,7 @@ import * as THREE from "three";
 import BlockTypeRegistry from "../blocks/BlockTypeRegistry";
 import { CHUNK_SIZE } from "./ChunkConstants";
 import ChunkManager from "./ChunkManager";
+import { getChunkProcessingPool } from "../managers/WorkerPool";
 /**
  * Integrates the chunk system with TerrainBuilder
  */
@@ -111,6 +112,141 @@ class ChunkSystem {
 
         this._chunkManager.updateChunks(chunks);
     }
+
+    /**
+     * Update from terrain data using parallel processing with Web Workers
+     * This method splits terrain data into batches and processes them in parallel
+     * to avoid blocking the main thread during large data loads
+     * @param {Object} terrainData - The terrain data object
+     * @param {Function} onProgress - Optional progress callback
+     */
+    async updateFromTerrainDataParallel(
+        terrainData: Object,
+        onProgress?: (progress: { current: number; total: number; percentage: number }) => void
+    ) {
+        if (!this._initialized) {
+            return;
+        }
+
+        const totalBlocks = Object.keys(terrainData).length;
+        console.log(`[ChunkSystem] Processing ${totalBlocks} blocks in parallel...`);
+
+        // Split terrain data into batches for parallel processing
+        const batchSize = 10000; // Process 10k blocks per worker
+        const entries = Object.entries(terrainData);
+        const batches: Array<{ type: string; data: any }> = [];
+
+        for (let i = 0; i < entries.length; i += batchSize) {
+            const batchEntries = entries.slice(i, i + batchSize);
+            const batchData = Object.fromEntries(batchEntries);
+
+            batches.push({
+                type: 'processBatch',
+                data: { terrainBlocks: batchData },
+            });
+        }
+
+        console.log(`[ChunkSystem] Split into ${batches.length} batches for parallel processing`);
+
+        // Get worker pool
+        const workerPool = getChunkProcessingPool();
+
+        // Process batches in parallel
+        const allChunksMap = new Map();
+        let processedBatches = 0;
+
+        try {
+            // Execute batches with progress tracking
+            const results = await workerPool.executeBatches(batches, (batchResults) => {
+                processedBatches += batchResults.length;
+
+                // Merge chunk results
+                batchResults.forEach((result: any) => {
+                    if (result && result.chunks) {
+                        for (const [chunkId, chunkData] of Object.entries(result.chunks)) {
+                            if (!allChunksMap.has(chunkId)) {
+                                allChunksMap.set(chunkId, {
+                                    id: chunkId,
+                                    origin: (chunkData as any).origin,
+                                    blocks: [],
+                                });
+                            }
+                            const chunk = allChunksMap.get(chunkId);
+                            chunk.blocks.push(...(chunkData as any).blocks);
+                        }
+                    }
+                });
+
+                // Report progress
+                if (onProgress) {
+                    const percentage = Math.round((processedBatches / batches.length) * 100);
+                    onProgress({
+                        current: processedBatches,
+                        total: batches.length,
+                        percentage,
+                    });
+                }
+
+                console.log(
+                    `[ChunkSystem] Processed ${processedBatches}/${batches.length} batches (${allChunksMap.size} chunks so far)`
+                );
+            });
+
+            console.log(`[ChunkSystem] Parallel processing complete. Building chunk arrays...`);
+
+            // Convert processed data to chunk format
+            const chunks = [];
+            for (const [chunkId, chunkData] of allChunksMap.entries()) {
+                const [x, y, z] = chunkId.split(",").map(Number);
+                const chunkBlocks = new Uint16Array(CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE);
+
+                // Fill chunk blocks array
+                for (const block of (chunkData as any).blocks) {
+                    const localX = block.localPosition.x;
+                    const localY = block.localPosition.y;
+                    const localZ = block.localPosition.z;
+                    const index = localX + CHUNK_SIZE * (localY + CHUNK_SIZE * localZ);
+                    chunkBlocks[index] = block.blockId;
+                }
+
+                chunks.push({
+                    originCoordinate: { x, y, z },
+                    blocks: chunkBlocks,
+                });
+            }
+
+            console.log(`[ChunkSystem] Built ${chunks.length} chunks from parallel processing`);
+
+            // Validate chunks
+            const validChunks = chunks.filter((chunk) => {
+                const { originCoordinate } = chunk;
+                if (
+                    isNaN(originCoordinate.x) ||
+                    isNaN(originCoordinate.y) ||
+                    isNaN(originCoordinate.z)
+                ) {
+                    console.warn(
+                        `Skipping chunk with NaN coordinates: ${JSON.stringify(originCoordinate)}`
+                    );
+                    return false;
+                }
+                return true;
+            });
+
+            console.log(`[ChunkSystem] Updating ${validChunks.length} valid chunks in chunk manager`);
+
+            // Update chunk manager
+            this._chunkManager.updateChunks(validChunks);
+
+            console.log(`[ChunkSystem] Parallel terrain update complete`);
+        } catch (error) {
+            console.error('[ChunkSystem] Error during parallel terrain processing:', error);
+            // Fallback to synchronous processing
+            console.warn('[ChunkSystem] Falling back to synchronous processing...');
+            this.updateFromTerrainData(terrainData);
+        }
+    }
+
     /**
      * Update blocks in the chunk system
      * @param {Array} addedBlocks - The blocks to add

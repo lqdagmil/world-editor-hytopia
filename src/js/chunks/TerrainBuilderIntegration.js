@@ -81,12 +81,15 @@ export const processChunkRenderQueue = () => {
  * Update the chunk system from terrain data
  * @param {Object} terrainData - The terrain data in format { "x,y,z": blockId }
  * @param {boolean} onlyVisibleChunks - If true, only create meshes for chunks within view distance
- * @returns {Object} Statistics about loaded blocks
+ * @param {Object} environmentBuilderRef - Reference to environment builder
+ * @param {boolean} useParallel - If true, use parallel processing with workers (default: true for large datasets)
+ * @returns {Promise<Object>} Statistics about loaded blocks
  */
-export const updateTerrainChunks = (
+export const updateTerrainChunks = async (
     terrainData,
     onlyVisibleChunks = false,
-    environmentBuilderRef = null
+    environmentBuilderRef = null,
+    useParallel = null
 ) => {
     if (!chunkSystem) {
         console.error(
@@ -102,7 +105,34 @@ export const updateTerrainChunks = (
         chunkSystem.setBulkLoadingMode(false);
     }
 
-    chunkSystem.updateFromTerrainData(terrainData);
+    // Determine whether to use parallel processing
+    const blockCount = Object.keys(terrainData).length;
+    const shouldUseParallel = useParallel !== null ? useParallel : blockCount > 5000;
+
+    console.log(
+        `[TerrainBuilderIntegration] Loading ${blockCount} blocks using ${shouldUseParallel ? 'parallel' : 'sequential'} processing`
+    );
+
+    // Use parallel processing for large datasets
+    if (shouldUseParallel) {
+        try {
+            await chunkSystem.updateFromTerrainDataParallel(terrainData, (progress) => {
+                // Optional: Update loading manager with progress
+                if (typeof loadingManager !== 'undefined' && loadingManager.isLoading) {
+                    loadingManager.updateLoading(
+                        `Processing chunks... ${progress.percentage}%`
+                    );
+                }
+            });
+        } catch (error) {
+            console.error('[TerrainBuilderIntegration] Parallel processing failed, falling back:', error);
+            // Fallback to synchronous processing
+            chunkSystem.updateFromTerrainData(terrainData);
+        }
+    } else {
+        // Use synchronous processing for small datasets
+        chunkSystem.updateFromTerrainData(terrainData);
+    }
 
     if (!updateTerrainChunks.spatialHashUpdating) {
         updateTerrainChunks.spatialHashUpdating = true;

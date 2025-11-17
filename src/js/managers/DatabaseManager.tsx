@@ -304,6 +304,127 @@ export class DatabaseManager {
             }
         });
     }
+
+    /**
+     * Stream data in batches for parallel processing
+     * This method yields control to the main thread between batches
+     * to prevent UI freezing during large data loads
+     */
+    static async streamDataInBatches(
+        storeName: string,
+        batchSize: number = 5000,
+        onBatch?: (batch: Record<string, any>, progress: { current: number; total: number }) => Promise<void>
+    ): Promise<Record<string, any>> {
+        const db = await this.getConnection();
+
+        return new Promise(async (resolve, reject) => {
+            try {
+                const tx = db.transaction(storeName, "readonly");
+                const store = tx.objectStore(storeName);
+
+                // Get total count first
+                const countRequest = store.count();
+
+                countRequest.onerror = (event) => {
+                    console.error(`[DB] Error counting ${storeName} store:`, event.target.error);
+                    reject(event.target.error);
+                };
+
+                countRequest.onsuccess = async (event) => {
+                    const totalCount = event.target.result;
+                    console.log(`[DB] Streaming ${totalCount} items from ${storeName} in batches of ${batchSize}`);
+
+                    const allData: Record<string, any> = {};
+                    let processedCount = 0;
+                    let currentBatch: Record<string, any> = {};
+                    let batchCount = 0;
+
+                    // Start cursor iteration
+                    const dataTx = db.transaction(storeName, "readonly");
+                    const dataStore = dataTx.objectStore(storeName);
+                    const cursorRequest = dataStore.openCursor();
+
+                    cursorRequest.onerror = (event) => {
+                        console.error(`[DB] Error reading ${storeName} store:`, event.target.error);
+                        reject(event.target.error);
+                    };
+
+                    cursorRequest.onsuccess = async (event) => {
+                        const cursor = event.target.result;
+
+                        if (cursor) {
+                            // Add to current batch
+                            currentBatch[cursor.key] = cursor.value;
+                            allData[cursor.key] = cursor.value;
+                            processedCount++;
+
+                            // Process batch when full or update loading
+                            if (processedCount % batchSize === 0) {
+                                batchCount++;
+
+                                // Update loading UI
+                                if (loadingManager.isLoading) {
+                                    loadingManager.updateLoading(
+                                        `Loading ${storeName}... ${processedCount}/${totalCount}`
+                                    );
+                                }
+
+                                // Call batch callback for parallel processing
+                                if (onBatch) {
+                                    try {
+                                        await onBatch(currentBatch, {
+                                            current: processedCount,
+                                            total: totalCount,
+                                        });
+                                    } catch (error) {
+                                        console.error('[DB] Error in batch callback:', error);
+                                    }
+                                }
+
+                                // Clear batch and yield to main thread
+                                currentBatch = {};
+
+                                // Yield to main thread to prevent freezing
+                                await new Promise(r => setTimeout(r, 0));
+                            }
+
+                            // Continue cursor
+                            cursor.continue();
+                        } else {
+                            // Process final batch if any
+                            if (Object.keys(currentBatch).length > 0) {
+                                if (loadingManager.isLoading) {
+                                    loadingManager.updateLoading(
+                                        `Loading ${storeName}... ${processedCount}/${totalCount}`
+                                    );
+                                }
+
+                                if (onBatch) {
+                                    try {
+                                        await onBatch(currentBatch, {
+                                            current: processedCount,
+                                            total: totalCount,
+                                        });
+                                    } catch (error) {
+                                        console.error('[DB] Error in final batch callback:', error);
+                                    }
+                                }
+                            }
+
+                            console.log(
+                                `[DB] Completed streaming ${processedCount} items from ${storeName} in ${batchCount + 1} batches`
+                            );
+                            resolve(allData);
+                        }
+                    };
+                };
+            } catch (error) {
+                console.error(`[DB] Exception during streamDataInBatches for store '${storeName}':`, error);
+                reject(error);
+            }
+        });
+    }
+
     static async deleteData(storeName: string, key: string): Promise<void> {
         const db = await this.getConnection();
         return new Promise((resolve, reject) => {

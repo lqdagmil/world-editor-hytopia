@@ -621,7 +621,7 @@ function TerrainBuilder(
             if (useProvidedBlocks) {
                 if (getChunkSystem() && updateTerrainChunks) {
                     console.log("buildUpdateTerrain - updateTerrainChunks");
-                    updateTerrainChunks(terrainBlocks, deferMeshBuilding);
+                    await updateTerrainChunks(terrainBlocks, deferMeshBuilding);
                     if (Object.keys(terrainRef.current).length === 0) {
                         const blockEntries = Object.entries(terrainBlocks);
                         const BATCH_SIZE = 10000;
@@ -654,7 +654,7 @@ function TerrainBuilder(
                 }
             } else {
                 if (getChunkSystem() && updateTerrainChunks) {
-                    updateTerrainChunks(terrainBlocks, deferMeshBuilding);
+                    await updateTerrainChunks(terrainBlocks, deferMeshBuilding);
                 } else {
                     console.warn(
                         "Chunk system or updateTerrainChunks not available"
@@ -1814,7 +1814,7 @@ function TerrainBuilder(
                                     await BlockTypeRegistry.instance.preload();
                                 }
                                 await rebuildTextureAtlas();
-                                updateTerrainChunks(
+                                await updateTerrainChunks(
                                     terrainRef.current,
                                     true,
                                     environmentBuilderRef
@@ -1831,7 +1831,7 @@ function TerrainBuilder(
                                 console.warn(
                                     "[Load] Error during texture preload, proceeding with terrain update."
                                 ); // <<< Add log
-                                updateTerrainChunks(terrainRef.current);
+                                await updateTerrainChunks(terrainRef.current);
                                 loadingManager.hideLoading();
                                 setPageIsLoaded(true);
                             }
