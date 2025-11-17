@@ -110,7 +110,7 @@ const importFromZip = async (file, terrainBuilderRef, environmentBuilderRef) => 
                     // Add a delay to ensure scene is ready, similar to App.tsx
                     setTimeout(() => {
                         console.log(`Applying imported skybox: ${skyboxName}`);
-                        terrainBuilderRef.current.changeSkybox(skyboxName);
+                        terrainBuilderRef.current?.changeSkybox(skyboxName);
                     }, 1000);
                 }
 
@@ -681,10 +681,10 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
 };
 export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) => {
     try {
-        const currentTerrainData = terrainBuilderRef.current.getCurrentTerrainData() || {};
+        const currentTerrainData = terrainBuilderRef.current?.getCurrentTerrainData() || {};
         const hasBlocks = Object.keys(currentTerrainData).length > 0;
 
-        const environmentObjects = environmentBuilderRef.current.getAllEnvironmentObjects();
+        const environmentObjects = environmentBuilderRef.current?.getAllEnvironmentObjects();
 
         if (!hasBlocks && (!environmentObjects || environmentObjects.length === 0)) {
             alert("Nothing to export! Add blocks or models first.");

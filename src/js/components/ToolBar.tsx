@@ -189,7 +189,7 @@ const ToolBar = ({
         });
         console.log("Current block type:", currentBlockType);
 
-        const terrainData = terrainBuilderRef.current.getCurrentTerrainData();
+        const terrainData = terrainBuilderRef.current?.getCurrentTerrainData() || {};
         console.log(
             "Initial terrain data count:",
             Object.keys(terrainData).length
@@ -248,7 +248,7 @@ const ToolBar = ({
             z: -length / 2,
         };
 
-        const terrainData = terrainBuilderRef.current.getCurrentTerrainData();
+        const terrainData = terrainBuilderRef.current?.getCurrentTerrainData() || {};
 
         for (let x = 0; x < width; x++) {
             for (let y = 0; y < height; y++) {
